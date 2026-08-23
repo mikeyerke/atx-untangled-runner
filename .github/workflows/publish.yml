@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: confidential-runner-publish
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   IMAGE: ghcr.io/mikeyerke/atx-untangled-runner
