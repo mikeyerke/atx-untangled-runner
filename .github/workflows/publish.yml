@@ -69,6 +69,30 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL
 
+      - name: Boot-test exact published image
+        shell: bash
+        run: |
+          set -euo pipefail
+          case_id="atx_00000000-0000-4000-8000-000000000001"
+          destroy_after="$(date -u -d '+5 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+          container_id="$(docker run --detach --rm \
+            --env "ATX_CASE_ID=${case_id}" \
+            --env "ATX_DESTROY_AFTER=${destroy_after}" \
+            --env "ATX_MAX_RUNTIME_SECONDS=300" \
+            --publish 127.0.0.1:8787:8787 \
+            "${IMAGE}@${{ steps.build.outputs.digest }}")"
+          trap 'docker rm --force "${container_id}" >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..30}; do
+            if body="$(curl --fail --silent --show-error http://127.0.0.1:8787/health)"; then
+              test "$(jq -r .ok <<<"${body}")" = "true"
+              test "$(jq -r .caseId <<<"${body}")" = "${case_id}"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs "${container_id}" || true
+          exit 1
+
       - name: Publish immutable digest
         run: |
           echo "CONFIDENTIAL_RUNNER_IMAGE=${IMAGE}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
