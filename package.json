@@ -8,6 +8,7 @@
     "check": "node --check src/server.mjs"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
     "@phala/dstack-sdk": "0.5.8",
     "http-proxy": "1.18.1",
     "playwright-core": "1.55.0"
