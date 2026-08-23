@@ -13,7 +13,7 @@ RUN npm install --prefix /bytebotd --omit=dev --no-audit --no-fund \
       @xhmikosr/decompress@10.2.1 form-data@4.0.4
 
 COPY src ./src
-COPY supervisor-atx.conf /etc/supervisor/conf.d/atx-runner.conf
+COPY supervisor-atx.conf /etc/supervisor/conf.d/supervisord.conf
 
 # The archived desktop base contains runtime-irrelevant development headers,
 # USB printer discovery, and an old global npm toolchain. Remove them after the
