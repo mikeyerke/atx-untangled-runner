@@ -90,7 +90,8 @@ jobs:
             fi
             sleep 2
           done
-          docker logs "${container_id}" || true
+          docker exec "${container_id}" supervisorctl status || true
+          docker exec "${container_id}" sh -c 'test ! -s /tmp/atx-runner-startup.err || tail -c 16384 /tmp/atx-runner-startup.err' || true
           exit 1
 
       - name: Publish immutable digest
