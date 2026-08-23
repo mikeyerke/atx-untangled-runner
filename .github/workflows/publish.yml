@@ -1,0 +1,64 @@
+name: Build and publish confidential runner
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  security-events: write
+
+concurrency:
+  group: confidential-runner-publish
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/mikeyerke/atx-untangled-runner
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+
+      - name: Log in to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push immutable image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=BUSL-1.1
+          sbom: true
+          provenance: mode=max
+
+      - name: Fail on known critical vulnerabilities
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL
+
+      - name: Publish immutable digest
+        run: |
+          echo "CONFIDENTIAL_RUNNER_IMAGE=${IMAGE}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
