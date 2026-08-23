@@ -19,12 +19,12 @@ const MAX_PAYLOAD_BYTES = 160_000;
 const MAX_RECEIPT_BYTES = 900_000;
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const publicJwk = publicKey.export({ format: "jwk" });
-const dstack = new DstackClient();
 const proxy = httpProxy.createProxyServer({ target: "http://127.0.0.1:9990", ws: true, xfwd: false });
 let job = null;
 let takeoverHash = null;
 let state = { status: "waiting_for_encrypted_job", updatedAt: new Date().toISOString() };
 let browser = null;
+let attestationReady = false;
 
 if (!/^atx_[0-9a-f-]{36}$/i.test(CASE_ID)) throw new Error("Invalid ATX_CASE_ID");
 const hardDeadline = Math.min(Number.isFinite(DESTROY_AFTER) ? DESTROY_AFTER : Infinity, Date.now() + MAX_RUNTIME_SECONDS * 1000);
@@ -40,8 +40,13 @@ function authorizedTakeover(req) { return Boolean(takeoverHash && (sameHash(Stri
 function allowedUrl(url, domains) { try { const host = new URL(url).hostname.toLowerCase(); return domains.some((domain) => host === domain || host.endsWith(`.${domain}`)); } catch { return false; } }
 
 async function attestation(nonce = "") {
+  // The dstack socket exists only inside a confidential VM. Constructing this
+  // client lazily keeps ordinary image boot/health checks meaningful while a
+  // successful hardware quote remains mandatory before execution.
+  const dstack = new DstackClient();
   const binding = hash(Buffer.from(`${CASE_ID}:${nonce}:${JSON.stringify(publicJwk)}`));
   const [quote, info] = await Promise.all([dstack.getQuote(binding), dstack.info()]);
+  attestationReady = true;
   return { caseId: CASE_ID, publicJwk, nonce, quote: quote.quote, eventLog: quote.event_log, reportData: quote.report_data || binding.toString("hex"), composeHash: info.compose_hash, appId: info.app_id, instanceId: info.instance_id, osImageHash: info.tcb_info?.os_image_hash || info.os_image_hash || "", expiresAt: new Date(hardDeadline).toISOString() };
 }
 
@@ -100,6 +105,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, caseId: CASE_ID, expiresAt: new Date(hardDeadline).toISOString() });
     if (req.method === "GET" && url.pathname === "/attestation") return json(res, 200, await attestation(url.searchParams.get("nonce") || ""));
     if (req.method === "POST" && url.pathname === "/execute") {
+      if (!attestationReady) return json(res, 428, { error: "Verified confidential attestation required before execution" });
       if (job) return json(res, 409, { error: "This room already has a job" }); const body = await readBody(req); const plaintext = await decryptEnvelope(body);
       takeoverHash = Buffer.from(String(plaintext.takeoverHash || ""), "hex"); if (takeoverHash.length !== 32) throw new Error("Invalid takeover binding"); job = plaintext.job;
       run(job).then((result) => { state = { ...result, updatedAt: new Date().toISOString() }; }).catch((error) => { state = { status: "failed", summary: error.message, updatedAt: new Date().toISOString() }; });
