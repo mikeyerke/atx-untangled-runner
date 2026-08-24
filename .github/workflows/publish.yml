@@ -17,6 +17,7 @@ permissions:
   packages: write
   id-token: write
   attestations: write
+  artifact-metadata: write
   security-events: write
 
 concurrency:
@@ -59,6 +60,18 @@ jobs:
           sbom: true
           provenance: mode=max
 
+      - name: Generate Sigstore-signed SLSA provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify repository identity and provenance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh attestation verify "oci://${IMAGE}@${{ steps.build.outputs.digest }}" --repo "${GITHUB_REPOSITORY}"
+
       - name: Fail on known critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -97,3 +110,4 @@ jobs:
       - name: Publish immutable digest
         run: |
           echo "CONFIDENTIAL_RUNNER_IMAGE=${IMAGE}@${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Provenance: Sigstore-signed GitHub artifact attestation for ${GITHUB_REPOSITORY}" >> "$GITHUB_STEP_SUMMARY"
