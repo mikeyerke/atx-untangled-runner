@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
+// Rebuilt after provenance hardening; runtime behavior is unchanged.
 import { createHash, createPublicKey, diffieHellman, generateKeyPairSync, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import process from "node:process";
