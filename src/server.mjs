@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: BUSL-1.1
-// Rebuilt after provenance hardening; runtime behavior is unchanged.
 import { createHash, createPublicKey, diffieHellman, generateKeyPairSync, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import process from "node:process";
@@ -39,6 +38,11 @@ function sameHash(value, expected) { const actual = hash(value); return expected
 function cookie(req, name) { return String(req.headers.cookie || "").split(";").map((v) => v.trim().split("=")).find(([key]) => key === name)?.[1] || ""; }
 function authorizedTakeover(req) { return Boolean(takeoverHash && (sameHash(String(req.headers["x-atx-takeover"] || ""), takeoverHash) || sameHash(cookie(req, "atx_takeover"), takeoverHash))); }
 function allowedUrl(url, domains) { try { const host = new URL(url).hostname.toLowerCase(); return domains.some((domain) => host === domain || host.endsWith(`.${domain}`)); } catch { return false; } }
+async function notifyPrivate(topic, message) {
+  if (!/^[a-f0-9]{48,96}$/i.test(String(topic || ""))) return false;
+  const response = await fetch("https://ntfy.sh", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic, title: "ATX Untangled", message, click: RESIDENT_ORIGIN, tags: ["bell"] }) }).catch(() => null);
+  return Boolean(response?.ok);
+}
 
 async function attestation(nonce = "") {
   // The dstack socket exists only inside a confidential VM. Constructing this
@@ -85,14 +89,16 @@ async function run(localJob) {
     await fillFirst(page, ["equipment", "model", "serial"], localJob.facts.equipment); await fillFirst(page, ["purchase date", "installation date"], localJob.facts.purchaseDate);
     for (let step = 0; step < MAX_AGENT_STEPS; step += 1) {
       const gate = await protectedGate(page);
-      if (gate.blocked) { state = { status: "needs_human", blocker: "Complete the protected step in the private browser. ATX will resume automatically.", takeoverPath: "/takeover", updatedAt: new Date().toISOString() }; while ((await protectedGate(page)).blocked && Date.now() < hardDeadline) await new Promise((r) => setTimeout(r, 2000)); state = { status: "running", updatedAt: new Date().toISOString() }; }
+      if (gate.blocked) { state = { status: "needs_human", blocker: "Complete the protected step in the private browser. ATX will resume automatically.", takeoverPath: "/takeover", updatedAt: new Date().toISOString() }; await notifyPrivate(localJob.facts.notificationTopic, "One protected action is ready in your private ATX room. ATX resumes automatically afterward."); while ((await protectedGate(page)).blocked && Date.now() < hardDeadline) await new Promise((r) => setTimeout(r, 2000)); state = { status: "running", updatedAt: new Date().toISOString() }; }
       const snap = await snapshot(page); const code = confirmation(snap.text);
       if (code && /(thank you|submitted|received|success|service request)/i.test(snap.text)) { const proof = await page.screenshot({ type: "jpeg", quality: 68, fullPage: true }); if (proof.length > MAX_RECEIPT_BYTES) throw new Error("Receipt proof exceeded size cap"); return { status: "submitted", officialConfirmation: code, officialStatusUrl: page.url(), proofBase64: proof.toString("base64"), proofSha256: hash(proof).toString("hex"), summary: "Submitted through the official channel; confirmation and proof were captured." }; }
       if (await clickFirst(page, ["Continue", "Next", "Review"])) continue;
       const submit = await firstVisible(page, [(p) => p.getByRole("button", { name: /submit|send request|finish/i }).first(), (p) => p.locator('button[type="submit"],input[type="submit"]').first()]);
       if (submit) { await submit.click(); await page.waitForTimeout(1500); continue; }
+      await notifyPrivate(localJob.facts.notificationTopic, "ATX needs one missing fact in your private room, then it will continue the submission.");
       return { status: "needs_human", blocker: "The official page requires one fact or choice that was not supplied.", takeoverPath: "/takeover", summary: "Use the private browser to answer the exact question. ATX will continue." };
     }
+    await notifyPrivate(localJob.facts.notificationTopic, "ATX could not obtain an agency receipt. Your case is saved for recovery.");
     return { status: "failed", summary: "The official site did not reach a confirmation within the action cap." };
   } finally { await context.close().catch(() => {}); await browser?.close().catch(() => {}); browser = null; }
 }
