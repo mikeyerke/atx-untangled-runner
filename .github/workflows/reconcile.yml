@@ -1,0 +1,22 @@
+name: Reconcile confidential session teardown
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: confidential-teardown-reconciler
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger fail-closed expiry reconciliation
+        run: |
+          curl --fail --silent --show-error             --retry 3 --retry-all-errors --max-time 30             "https://atx-unlocked.mikeyerke.chatgpt.site/api/readiness"             >/dev/null
