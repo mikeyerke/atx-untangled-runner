@@ -2,7 +2,7 @@ name: Reconcile confidential session teardown
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -16,7 +16,21 @@ jobs:
   reconcile:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    env:
+      ATX_RESIDENT_ORIGIN: ${{ vars.ATX_RESIDENT_ORIGIN }}
     steps:
-      - name: Trigger fail-closed expiry reconciliation
+      # Readiness is read-only. The resident app's scheduled maintenance owns teardown.
+      - name: Check resident readiness (no teardown)
+        shell: bash
         run: |
-          curl --fail --silent --show-error             --retry 3 --retry-all-errors --max-time 30             "https://atx-unlocked.mikeyerke.chatgpt.site/api/readiness"             >/dev/null
+          set -euo pipefail
+          : "${ATX_RESIDENT_ORIGIN:?Set the ATX_RESIDENT_ORIGIN repository variable to the live HTTPS origin}"
+          if [[ ! "$ATX_RESIDENT_ORIGIN" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]]; then
+            echo "::error::ATX_RESIDENT_ORIGIN must be an HTTPS origin without a path, query, credentials, or fragment."
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            --proto '=https' --request GET \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 20 \
+            --url "${ATX_RESIDENT_ORIGIN%/}/api/readiness" \
+            >/dev/null
