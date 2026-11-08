@@ -85,8 +85,7 @@ maintenance trigger is added here.
 The initial November 8 D1 query returned authorization error `7403`. After
 refreshing the existing CLI session, a read-only ledger/deletion-receipt audit
 succeeded: all 14 retained session rows are destroyed, all 11 allocated provider
-resources have deletion confirmations, and the other three rows have no provider
-allocation. Seven retained rows were destroyed after October 17. The ledger
+resources have deletion confirmations, and the other three rows have no recorded provider ID. Seven retained rows were destroyed after October 17. The ledger
 reports zero active sessions, reserved minutes, or outstanding expired rows.
 There was no tracked backlog requiring catch-up and no cleanup was triggered.
 This is retained-ledger evidence, not a fresh full provider inventory or a
