@@ -7,10 +7,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 RUN node node_modules/playwright-core/cli.js install --with-deps chromium
 
-# Patch the two vulnerable transitive runtime dependencies inherited from the
-# archived Bytebot desktop image. Explicit versions match Trivy fixed ranges.
-RUN npm install --prefix /bytebotd --omit=dev --no-audit --no-fund \
-      @xhmikosr/decompress@10.2.1 form-data@4.0.4
+# Patch known vulnerable runtime dependencies inherited from the archived
+# Bytebot desktop image. Explicit versions match Trivy fixed ranges.
+RUN npm install --prefix /bytebotd --save-exact --omit=dev --no-audit --no-fund \
+      @xhmikosr/decompress@10.2.2 form-data@4.0.4 proxy-addr@2.0.8
 
 COPY src ./src
 COPY supervisor-atx.conf /etc/supervisor/conf.d/supervisord.conf
