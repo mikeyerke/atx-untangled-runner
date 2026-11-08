@@ -82,10 +82,14 @@ read-only session-ledger and provider-inventory/deletion evidence. Any real
 cleanup must be reviewed and authorized separately; no cleanup endpoint or
 maintenance trigger is added here.
 
-The November 8 audit could not verify the current session ledger: Cloudflare
-rejected the read-only D1 query with authorization error `7403`. No conclusion
-that every historical session was deleted follows from a healthy readiness
-response or the configured cron alone.
+The initial November 8 D1 query returned authorization error `7403`. After
+refreshing the existing CLI session, a read-only ledger/deletion-receipt audit
+succeeded: all 14 retained session rows are destroyed, all 11 allocated provider
+resources have deletion confirmations, and the other three rows have no recorded provider ID. Seven retained rows were destroyed after October 17. The ledger
+reports zero active sessions, reserved minutes, or outstanding expired rows.
+There was no tracked backlog requiring catch-up and no cleanup was triggered.
+This is retained-ledger evidence, not a fresh full provider inventory or a
+reconstruction of every historical session generation.
 
 Merging a change to `src/server.mjs` also matches the existing main-branch
 `publish.yml` image-build trigger. Opening this PR does not run either workflow.
